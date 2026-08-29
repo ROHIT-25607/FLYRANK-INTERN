@@ -1,0 +1,122 @@
+{
+  "task": "ml-09",
+  "decision_month": "2026-03",
+  "label_month": "2026-04",
+  "source": "re-audit of w05_model_metrics.json + w04_baseline_metrics.json",
+  "section1": {
+    "feature_window": [
+      "2026-03-01 00:00:00",
+      "2026-03-31 00:00:00"
+    ],
+    "label_window": [
+      "2026-04-01 00:00:00",
+      "2026-04-30 00:00:00"
+    ],
+    "adjacent_non_overlapping": true,
+    "whole_pool_base_rate": 0.515,
+    "majority_class_accuracy_decline": 0.515,
+    "majority_class_accuracy_stable": 0.485,
+    "random_split_client_overlap": 39,
+    "grouped_split_client_overlap": 0
+  },
+  "section2": {
+    "before_random_70_30": {
+      "pk": {
+        "10": 0.9,
+        "20": 0.95,
+        "50": 0.92,
+        "100": 0.96
+      },
+      "auc": 0.77,
+      "tr_auc": 0.853,
+      "test_base": 0.515,
+      "client_overlap": 39
+    },
+    "after_grouped_by_client": {
+      "pk": {
+        "10": 0.9,
+        "20": 0.9,
+        "50": 0.86,
+        "100": 0.87
+      },
+      "auc": 0.739,
+      "tr_auc": 0.852,
+      "test_base": 0.429,
+      "client_overlap": 0
+    },
+    "groupkfold5": {
+      "p50_mean": 0.944,
+      "p50_sd": 0.023,
+      "auc_mean": 0.751,
+      "auc_sd": 0.024
+    }
+  },
+  "section3": {
+    "leak_trap": {
+      "honest_p50": 0.86,
+      "honest_auc": 0.739,
+      "leak_p50": 1.0,
+      "leak_auc": 0.995
+    },
+    "feature_knowability": [
+      {
+        "feature": "imp_march",
+        "what": "sum of March impressions",
+        "available_at_decision": "Yes - March partition"
+      },
+      {
+        "feature": "clk_march",
+        "what": "sum of March clicks",
+        "available_at_decision": "Yes - March partition"
+      },
+      {
+        "feature": "ctr",
+        "what": "clk_march / imp_march",
+        "available_at_decision": "Yes - March only"
+      },
+      {
+        "feature": "pos_march",
+        "what": "avg March position",
+        "available_at_decision": "Yes - March only"
+      },
+      {
+        "feature": "active_days_march",
+        "what": "days with impressions in March",
+        "available_at_decision": "Yes - March only"
+      },
+      {
+        "feature": "momentum_last7",
+        "what": "impressions Mar 25-31 / March total",
+        "available_at_decision": "Yes - Mar 31 fully closed"
+      },
+      {
+        "feature": "inert_days",
+        "what": "days since last active day",
+        "available_at_decision": "Yes - capped at Mar 31"
+      },
+      {
+        "feature": "band / pos_valid",
+        "what": "position band + validity",
+        "available_at_decision": "Yes - derived from March pos"
+      },
+      {
+        "feature": "content_updated_date",
+        "what": "dim_content staleness (REJECTED)",
+        "available_at_decision": "NO - as-of-release cloud 2026-07 dates"
+      },
+      {
+        "feature": "apr_imp",
+        "what": "label-month impressions (REJECTED)",
+        "available_at_decision": "NO - April window"
+      }
+    ],
+    "client_overlap_grouped": 0
+  },
+  "section4": {
+    "claims_rewritten": [
+      "P@50 0.86 / P@100 0.87 / AUC 0.739 on held-out clients - far above the baseline (0.44).",
+      "momentum_last7 dominates the model's importance.",
+      "The two rankings share no top-50 pages, so both notions of 'worth reviewing' are real."
+    ]
+  }
+}
