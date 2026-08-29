@@ -49,7 +49,7 @@
 </div>
 
 <h2>1 &nbsp;Introduction / Problem statement</h2>
-<p>An editor opens the month and sees a list of under-performing pages. Their instinct is to review the pages that <em>lost</em> the most traffic last month. We tested that instinct in this work &#8212; and it fails. The rule baseline this paper is measured against (identify decliners by raw impression change) scores barely above flipping a coin on held-out clients (AUC 0.451), because a page that just lost traffic is often a page that was already invisible.</p>
+<p>An editor opens the month and sees a list of under-performing pages. Their instinct is to check the pages that <em>lost</em> the most traffic last month &mdash; but the pages that lost the most are often pages that were already invisible, and ranking by "biggest faller" barely clears chance as a cue. The rule baseline this paper is measured against (w04's hand rule: CTR-for-position risk &times; impression exposure) reaches only P@50 0.44 / AUC 0.451 on held-out clients, because a single month's fall does not separate the worth-reviewing from the irrelevant.</p>
 <p>The decision this work supports is concrete: <strong>which pages should an editor review first</strong>, given a budget of a few hundred reviews for a whole client portfolio. The answer needs to be a short, ranked queue, not a wall of dashboards &#8212; each row carrying a reason the editor can verify by hand. Lane 2 of the internship program: <em>Refresh / Content Opportunity Scoring</em>.</p>
 
 <h2>2 &nbsp;Data</h2>
@@ -66,9 +66,9 @@
 <h3>Label definition</h3>
 <p><em>Declined next-month:</em> a page whose April impressions fell below 80% of its March impressions. This is a <strong>relative</strong> decline label &#8212; it asks "is this page under-performing its own recent baseline?," the question editors actually act on &#8212; which also makes it robust to month-to-month market shifts. April-only; no page contributes both to its decision window and its outcome window.</p>
 <h3>Features</h3>
-<p>Nine March-only features (impressions, clicks, CTR, average position, top-3 / page-1 band share, days since last active day, last-7-day impression share of the month, event count, decliner share of the client). No feature reaches into April.</p>
+<p>Nine March-only features: impressions, clicks, CTR, average position, active days, last-7-day impression share of the month (<em>momentum</em>), days since the last active day, position band, and a position-present flag. No feature reaches into April.</p>
 <h3>Baseline &amp; models</h3>
-<p>Transparent rule baseline (identify decliners by raw impression fall) vs logistic regression vs Random Forest &mdash; all scored on the <em>same</em> held-out clients with class weights to counter the ~49/51 split.</p>
+<p>Transparent hand-rule baseline (w04: CTR-for-position risk &times; impression exposure) vs logistic regression vs Random Forest &mdash; all scored on the <em>same</em> held-out clients with class weights to counter the ~49/51 split.</p>
 <h3>Validation design (the part that separates this from a blog post)</h3>
 <ul>
 <li><strong>Grouped split:</strong> 30 clients train / 13 held-out, seed 42. Pages are never split randomly, because random splits leak <em>client behavior</em> into training &mdash; we measured the damage directly: a random split reached P@50 0.92 but reported 39 of 39 top-50 pages as already-seen clients. The honest grouped split reports 0 overlap and P@50 0.86.</li>
@@ -81,7 +81,7 @@
 <table>
 <tr><th>Model (held-out test)</th><th>P@10</th><th>P@20</th><th>P@50</th><th>P@100</th><th>AUC</th></tr>
 <tr><td>Chance (base rate)</td><td>0.43</td><td>0.43</td><td>0.43</td><td>0.43</td><td>0.50</td></tr>
-<tr><td>Rule baseline (impression fall)</td><td>0.70</td><td>0.70</td><td>0.44</td><td>0.45</td><td>0.451</td></tr>
+<tr><td>Rule baseline (w04 hand rule)</td><td>0.70</td><td>0.70</td><td>0.44</td><td>0.45</td><td>0.451</td></tr>
 <tr><td>Logistic regression</td><td>0.80</td><td>0.85</td><td>0.70</td><td>0.69</td><td>0.731</td></tr>
 <tr><td><strong>Random Forest</strong></td><td><strong>0.90</strong></td><td><strong>0.90</strong></td><td><strong>0.86</strong></td><td><strong>0.87</strong></td><td><strong>0.739</strong></td></tr>
 </table>
@@ -123,16 +123,17 @@
 <h2>7 &nbsp;Reproducibility</h2>
 <p>Everything runs from the public repo &mdash; notebooks execute cleanly top-to-bottom on any machine (a miniconda/mamba env works out of the box):</p>
 <ul>
-<li><code>work/notebooks/w03_model_features.ipynb</code> &mdash; warehouse scan, pool definition, feature build, leakage test #1.</li>
-<li><code>work/notebooks/w04_baseline.ipynb</code> &mdash; the rule baseline and its receipts.</li>
-<li><code>work/notebooks/w05_model_build.ipynb</code> &mdash; models, grouped split, exact metrics behind the table above.</li>
+<li><code>work/notebooks/w03_data_contract.ipynb</code> &mdash; warehouse scan, pool definition, data contract.</li>
+<li><code>work/notebooks/w04_baseline_score.ipynb</code> &mdash; the w04 hand rule and its receipts.</li>
+<li><code>work/notebooks/w05_model.ipynb</code> &mdash; models, grouped split, the exact metrics behind the table above.</li>
 <li><code>work/notebooks/w06_validation_audit.ipynb</code> &mdash; random-vs-grouped overlap audit, leak trap, claim rewrites.</li>
 <li><code>work/notebooks/w07_action_playbook.ipynb</code> &mdash; the deployed queue, reason codes, monitoring probes, exports.</li>
+<li><code>work/notebooks/capstone.ipynb</code> &mdash; this paper in executable form; it re-runs the study and regenerates every chart the page embeds.</li>
 </ul>
 <div class="cv"># one-line run
 git clone https://github.com/ROHIT-25607/FLYRANK-INTERN
 cd FLYRANK-INTERN
-jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=2400 work/notebooks/w07_action_playbook.ipynb</div>
+jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=2400 work/notebooks/capstone.ipynb</div>
 <p>Metrics receipts (<code>work/outputs/w0X_*_metrics.json</code>) pin every number quoted here; seed 42 throughout. The data read requires the (free, 2-minute) warehouse access on Hugging Face.</p>
 
 <h2>8 &nbsp;Acknowledgments &amp; data credit</h2>
