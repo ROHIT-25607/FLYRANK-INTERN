@@ -53,7 +53,7 @@
 <p>The decision this work supports is concrete: <strong>which pages should an editor review first</strong>, given a budget of a few hundred reviews for a whole client portfolio. The answer needs to be a short, ranked queue, not a wall of dashboards &#8212; each row carrying a reason the editor can verify by hand. Lane 2 of the internship program: <em>Refresh / Content Opportunity Scoring</em>.</p>
 
 <h2>2 &nbsp;Data</h2>
-<p>Economic facts, not click-level logs. The dataset is a pre-aggregated, public-but-gated release (Hugging Face, read token): per-page daily counts of impressions, clicks, position, active days, and content-release dates, partitioned by month. No client names, domains, URLs, or queries appear anywhere in this report; all identities are hashes.</p>
+<p>Economic facts, not click-level logs. The dataset is the <code>FlyRank/internship-warehouse</code> release on Hugging Face (public-but-gated, read token): per-page daily counts of impressions, clicks, position, active days, and content-release dates, partitioned by month. No client names, domains, URLs, or queries appear anywhere in this report; all identities are hashes.</p>
 <ul>
 <li><strong>Decision window (features):</strong> March 2026 (facts taken from the closed <code>2026-03</code> partition).</li>
 <li><strong>Outcome window (label):</strong> April 2026, measured on the <em>next</em> partition.</li>
@@ -136,7 +136,7 @@ jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=2400 wor
 <p>Metrics receipts (<code>work/outputs/w0X_*_metrics.json</code>) pin every number quoted here; seed 42 throughout. The data read requires the (free, 2-minute) warehouse access on Hugging Face.</p>
 
 <h2>8 &nbsp;Acknowledgments &amp; data credit</h2>
-<p>Built on the <a href="https://flyrank.ai">FlyRank ML Internship dataset</a> &#8212; a public, per-page, daily economic-signal release for search &amp; discoverability research. Grateful to the internship team for shipping a real warehouse, an honest progress-tracker, and a task list with a paper at the end of it.</p>
+<p>Built on the <a href="https://flyrank.ai" target="_blank" rel="noopener">FlyRank ML Internship dataset</a> &#8212; a public, per-page, daily economic-signal release for search &amp; discoverability research. Grateful to the internship team for shipping a real warehouse, an honest progress-tracker, and a task list with a paper at the end of it.</p>
 
 <footer>
 <p>A capstone research paper of the FlyRank ML Internship &#183; Free tools only (GitHub Pages, Python, DuckDB, scikit-learn) &#183; No client names, domains, URLs, or private queries appear on this page.</p>

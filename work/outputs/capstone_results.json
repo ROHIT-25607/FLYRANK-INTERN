@@ -1,0 +1,14 @@
+{
+  "capstone": "co-signed with w05",
+  "test_base_rate": 0.429,
+  "measured_claims": {
+    "precision_at_k": {
+      "10": 0.9,
+      "20": 0.9,
+      "50": 0.86,
+      "100": 0.87
+    },
+    "roc_auc_rf": 0.739
+  },
+  "top_feature": "momentum_last7"
+}
