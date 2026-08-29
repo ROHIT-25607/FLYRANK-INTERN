@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which visible pages deserve the editor's first pass? A ranked refresh playbook for Search Console data</title>
+<meta name="description" content="A Random Forest trained on March 2026 Search Console facts (100,893 pages, 43 clients) ranks which existing pages a content editor should review first — precision@50 0.86 on held-out clients vs 0.44 for a rule baseline — shipped as a human-reviewed action playbook.">
+<style>
+  :root{--ink:#1a1d21;--mut:#5f6368;--line:#e3e6ea;--bg:#ffffff;--soft:#f7f8f9;--acc:#4285F4;}
+  *{box-sizing:border-box;}
+  body{margin:0;font:16px/1.65 Georgia,"Times New Roman",serif;color:var(--ink);background:var(--bg);}
+  .wrap{max-width:780px;margin:0 auto;padding:40px 22px 80px;}
+  h1,h2,h3{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.25;}
+  h1{font-size:1.9rem;letter-spacing:-.01em;margin:.1em 0 .3em;}
+  h2{font-size:1.25rem;margin:2.4em 0 .6em;padding-top:.8em;border-top:1px solid var(--line);}
+  h3{font-size:1rem;margin:1.4em 0 .35em;}
+  p{margin:.5em 0;}
+  .kicker{text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;color:var(--acc);font-family:system-ui,sans-serif;font-weight:700;}
+  .abstract{background:var(--soft);border:1px solid var(--line);border-left:4px solid var(--acc);padding:18px 20px;border-radius:4px;margin:1.6em 0;}
+  .abstract p{margin:0;font-size:1.02rem;}
+  .meta{color:var(--mut);font-family:system-ui,sans-serif;font-size:.92rem;}
+  table{border-collapse:collapse;width:100%;margin:1em 0;font-family:system-ui,sans-serif;font-size:.92rem;}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:right;}
+  th:first-child,td:first-child{text-align:left;}
+  th{background:var(--soft);}
+  .muted{color:var(--mut);}
+  figure{margin:1.4em 0;text-align:center;}
+  figure img{max-width:100%;height:auto;border:1px solid var(--line);border-radius:4px;}
+  figcaption{font-size:.86rem;color:var(--mut);font-family:system-ui,sans-serif;margin-top:.5em;}
+  .take{font-size:.9rem;font-family:system-ui,sans-serif;font-style:normal;}
+  pre,code,.mono{font-family:ui-monospace,Consolas,monospace;}
+  .cv{background:#0f1115;color:#d9e1e8;padding:12px 14px;border-radius:4px;overflow-x:auto;font-size:.82rem;}
+  ul,ol{margin:.5em 0 .5em 1.2em;padding:0;}
+  li{margin:.22em 0;}
+  .pill{display:inline-block;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-family:system-ui,sans-serif;font-size:.78rem;color:var(--mut);margin:0 4px 6px 0;}
+  a{color:var(--acc);}
+  footer{margin-top:3em;color:var(--mut);font-size:.86rem;font-family:system-ui,sans-serif;border-top:1px solid var(--line);padding-top:1em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<p class="kicker">Search Intelligence &middot; Capstone Research</p>
+<h1>Which visible pages deserve the editor's first pass?</h1>
+<p class="meta">A ranked refresh-action playbook for Search Console data &mdash; built on the FlyRank ML Internship dataset.</p>
+
+<div class="abstract">
+<p><strong>Abstract.</strong> When a content editor can only review a handful of pages, which of a portfolio's already-visible pages deserve attention first? On a public, anonymized warehouse slice &mdash; 100,893 pages across 43 clients, using March 2026 Search Console facts and an April outcome label &mdash; we trained a Random Forest and scored it against a transparent rule baseline on a held-out set of whole clients. On the same held-out clients the forest ranked decline-risk pages at precision@50 0.86 (rule baseline 0.44; chance 0.43), under a grouped-by-client, leakage-audited validation design. The ranking's strongest driver was recent impression momentum, and a deliberate leak probe &#8212; adding a future-month feature &#8212; showed how badly accuracy inflates when the outcome window leaks into features (P@50 1.00, AUC 0.995). The result is a ranked content action playbook: a short, human-reviewed queue with reason codes, limits, and monitoring triggers &#8212; decision support for the editor, not a traffic forecast.</p>
+</div>
+
+<h2>1 &nbsp;Introduction / Problem statement</h2>
+<p>An editor opens the month and sees a list of under-performing pages. Their instinct is to review the pages that <em>lost</em> the most traffic last month. We tested that instinct in this work &#8212; and it fails. The rule baseline this paper is measured against (identify decliners by raw impression change) scores barely above flipping a coin on held-out clients (AUC 0.451), because a page that just lost traffic is often a page that was already invisible.</p>
+<p>The decision this work supports is concrete: <strong>which pages should an editor review first</strong>, given a budget of a few hundred reviews for a whole client portfolio. The answer needs to be a short, ranked queue, not a wall of dashboards &#8212; each row carrying a reason the editor can verify by hand. Lane 2 of the internship program: <em>Refresh / Content Opportunity Scoring</em>.</p>
+
+<h2>2 &nbsp;Data</h2>
+<p>Economic facts, not click-level logs. The dataset is a pre-aggregated, public-but-gated release (Hugging Face, read token): per-page daily counts of impressions, clicks, position, active days, and content-release dates, partitioned by month. No client names, domains, URLs, or queries appear anywhere in this report; all identities are hashes.</p>
+<ul>
+<li><strong>Decision window (features):</strong> March 2026 (facts taken from the closed <code>2026-03</code> partition).</li>
+<li><strong>Outcome window (label):</strong> April 2026, measured on the <em>next</em> partition.</li>
+<li><strong>Lane pool:</strong> 100,893 pages &times; 43 clients; March impressions &ge; 100; pages with adequate Search Console reporting (<code>gsc_data_available</code>).</li>
+<li><strong>Excluded &amp; why:</strong> GA4 engagement facts (sparse &mdash; present for only ~4% of pages that month, so they would silently shrink the real population); geographic/dimension slices (too granular to aggregate safely); content-release date as a feature (dates are <em>as-of-release</em> and leak the future). A sealed June 2026 evaluation month exists and is never used for label development &#8212; it is held for the next cycle.</li>
+</ul>
+<p>This slice prints to ~90 MB and runs end-to-end on a laptop in minutes, or in a free Colab over <code>hf://</code>.</p>
+
+<h2>3 &nbsp;Methodology</h2>
+<h3>Label definition</h3>
+<p><em>Declined next-month:</em> a page whose April impressions fell below 80% of its March impressions. This is a <strong>relative</strong> decline label &#8212; it asks "is this page under-performing its own recent baseline?," the question editors actually act on &#8212; which also makes it robust to month-to-month market shifts. April-only; no page contributes both to its decision window and its outcome window.</p>
+<h3>Features</h3>
+<p>Nine March-only features (impressions, clicks, CTR, average position, top-3 / page-1 band share, days since last active day, last-7-day impression share of the month, event count, decliner share of the client). No feature reaches into April.</p>
+<h3>Baseline &amp; models</h3>
+<p>Transparent rule baseline (identify decliners by raw impression fall) vs logistic regression vs Random Forest &mdash; all scored on the <em>same</em> held-out clients with class weights to counter the ~49/51 split.</p>
+<h3>Validation design (the part that separates this from a blog post)</h3>
+<ul>
+<li><strong>Grouped split:</strong> 30 clients train / 13 held-out, seed 42. Pages are never split randomly, because random splits leak <em>client behavior</em> into training &mdash; we measured the damage directly: a random split reached P@50 0.92 but reported 39 of 39 top-50 pages as already-seen clients. The honest grouped split reports 0 overlap and P@50 0.86.</li>
+<li><strong>Leakage audits:</strong> feature/label window separation (adjacent, non-overlapping months), feature-staleness tests, and a deliberate <em>leak trap</em> &#8212; injecting an April-view feature raised P@50 to 1.00 and AUC to 0.995, a red flag we never want to see in production numbers.</li>
+<li><strong>Stability:</strong> 5-fold GroupKFold reproduced the claim (P@50 0.944 &plusmn; 0.023, AUC 0.751 &plusmn; 0.024).</li>
+</ul>
+
+<h2>4 &nbsp;Results</h2>
+<p>On the same 13 held-out clients, all three approaches, and the base rate visible:</p>
+<table>
+<tr><th>Model (held-out test)</th><th>P@10</th><th>P@20</th><th>P@50</th><th>P@100</th><th>AUC</th></tr>
+<tr><td>Chance (base rate)</td><td>0.43</td><td>0.43</td><td>0.43</td><td>0.43</td><td>0.50</td></tr>
+<tr><td>Rule baseline (impression fall)</td><td>0.70</td><td>0.70</td><td>0.44</td><td>0.45</td><td>0.451</td></tr>
+<tr><td>Logistic regression</td><td>0.80</td><td>0.85</td><td>0.70</td><td>0.69</td><td>0.731</td></tr>
+<tr><td><strong>Random Forest</strong></td><td><strong>0.90</strong></td><td><strong>0.90</strong></td><td><strong>0.86</strong></td><td><strong>0.87</strong></td><td><strong>0.739</strong></td></tr>
+</table>
+<figure>
+<img src="img/results_precision_at_k.png" alt="Precision at K: rule baseline, logistic regression, and random forest on the same held-out clients, with the base rate as a dashed line.">
+<figcaption><span class="take"><strong>Takeaway:</strong> at the review budgets an editor actually has, the forest's early rows are correct 9 out of 10 times &#8212; the rule baseline collapses to near-chance once you pass a handful of pages.</span></figcaption>
+</figure>
+<figure>
+<img src="img/w07_heldout_pk.png" alt="Held-out precision at K for the deployed random forest at ten review budgets.">
+<figcaption><span class="take"><strong>Takeaway:</strong> the shipped forest marks ~86&ndash;90% of the pages it ranks first, across every budget from a 10-page scan to a 500-page pass.</span></figcaption>
+</figure>
+<p>Why does the model win? The strongest permutation-importance driver is <strong>last-7-day momentum</strong> (the share of a page's monthly impressions that arrived in its final week) &#8212; a page whose traffic is already decelerating is the one most likely to end the next month down, and that signal is invisible to a raw "biggest faller" rule. The full pipeline, seeds, and receipts live in the notebooks under <code>work/notebooks/</code>.</p>
+
+<h2>5 &nbsp;Limitations &amp; honest framing</h2>
+<ul>
+<li><strong>Decision support, not a forecast.</strong> Every number is a ranking signal; nothing here predicts a <em>future</em> value of any page and nothing claims a causal effect of refreshing content.</li>
+<li><strong>Observed &mdash; directional.</strong> Ranking was measured on held-out clients (the one thing we are willing to state as a percentage); the "editor reviews then traffic recovers" half of the story was never measured &#8212; that would need an experiment we didn't run, so the page says so.</li>
+<li><strong>High batched magnitude, fine relative behavior.</strong> Scores are not calibrated probabilities; we rank within a fixed April-labeled slice and never reuse the queue after the next month closes.</li>
+<li><strong>Survivor pool.</strong> Invisible pages (impressions &lt; 100) were out of scope by design &mdash; the playbook reviews pages that are <em>already being seen</em> but not earning it.</li>
+<li><strong>One month, one market.</strong> 43 clients and a single client-holdout are modest; GroupKFold stability checks help, but a cross-market replication is the honest next step.</li>
+</ul>
+
+<h2>6 &nbsp;Ranked recommendations &mdash; the action playbook</h2>
+<p>The queue is the product. Every row of the pool was scored and bucketed into four actions; flags become human-readable reason codes; no row is ever acted on without a person.</p>
+<figure>
+<img src="img/w07_action_mix.png" alt="Share of pool assigned to each action: investigate first, watch and prepare, monitor, no action.">
+<figcaption><span class="take"><strong>Takeaway:</strong> a good playbook is intentionally small &mdash; 1% of pages go to the editor's first pass, the rest are handled by brightness of monitoring.</span></figcaption>
+</figure>
+<table>
+<tr><th>Action</th><th>Share of pool</th><th>What the editor does</th></tr>
+<tr><td><strong>Investigate first</strong></td><td>1.0% (1,009 pages)</td><td>Top pages seen but under-earning; reason code says why (e.g. <em>ctr_gap+momentum_loss</em>). Review the top hundred in one sitting.</td></tr>
+<tr><td>Watch &amp; prepare</td><td>1.5% (1,514)</td><td>Borderline band: draft a refresh while the evidence matures.</td></tr>
+<tr><td>Monitor</td><td>7.5% (7,567)</td><td>Drift-watch only; re-check when the next month closes.</td></tr>
+<tr><td>No action</td><td>90.0% (90,803)</td><td>Leave it; the queue must stay small to stay useful.</td></tr>
+</table>
+<p>Reason codes are feature-only flags (CTR gap vs the page's position band, lost momentum, inactivity, volume exposure). The most common code on review-first pages was <em>ctr_gap + momentum_loss</em>: a page sitting on page one that is both under-earning clicks and already decelerating &mdash; precisely the page an editor should look at first.</p>
+<p><strong>What is hard-coded against misuse:</strong> no automation flag is ever written (every action is a human to-do, not a trigger); no label or April window enters the exported queue (asserted in the notebook); no silent retrain (a retrain gate checks base-rate and feature-drift probes against closed months, then requires human sign-off); and the sealed June evaluation month is never used for label development.</p>
+
+<h2>7 &nbsp;Reproducibility</h2>
+<p>Everything runs from the public repo &mdash; notebooks execute cleanly top-to-bottom on any machine (a miniconda/mamba env works out of the box):</p>
+<ul>
+<li><code>work/notebooks/w03_model_features.ipynb</code> &mdash; warehouse scan, pool definition, feature build, leakage test #1.</li>
+<li><code>work/notebooks/w04_baseline.ipynb</code> &mdash; the rule baseline and its receipts.</li>
+<li><code>work/notebooks/w05_model_build.ipynb</code> &mdash; models, grouped split, exact metrics behind the table above.</li>
+<li><code>work/notebooks/w06_validation_audit.ipynb</code> &mdash; random-vs-grouped overlap audit, leak trap, claim rewrites.</li>
+<li><code>work/notebooks/w07_action_playbook.ipynb</code> &mdash; the deployed queue, reason codes, monitoring probes, exports.</li>
+</ul>
+<div class="cv"># one-line run
+git clone https://github.com/ROHIT-25607/FLYRANK-INTERN
+cd FLYRANK-INTERN
+jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=2400 work/notebooks/w07_action_playbook.ipynb</div>
+<p>Metrics receipts (<code>work/outputs/w0X_*_metrics.json</code>) pin every number quoted here; seed 42 throughout. The data read requires the (free, 2-minute) warehouse access on Hugging Face.</p>
+
+<h2>8 &nbsp;Acknowledgments &amp; data credit</h2>
+<p>Built on the <a href="https://flyrank.ai">FlyRank ML Internship dataset</a> &#8212; a public, per-page, daily economic-signal release for search &amp; discoverability research. Grateful to the internship team for shipping a real warehouse, an honest progress-tracker, and a task list with a paper at the end of it.</p>
+
+<footer>
+<p>A capstone research paper of the FlyRank ML Internship &#183; Free tools only (GitHub Pages, Python, DuckDB, scikit-learn) &#183; No client names, domains, URLs, or private queries appear on this page.</p>
+</footer>
+
+</div>
+</body>
+</html>
