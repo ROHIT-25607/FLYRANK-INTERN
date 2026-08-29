@@ -53,7 +53,7 @@
 <p>The decision this work supports is concrete: <strong>which pages should an editor review first</strong>, given a budget of a few hundred reviews for a whole client portfolio. The answer needs to be a short, ranked queue, not a wall of dashboards &#8212; each row carrying a reason the editor can verify by hand. That is the FlyRank refresh problem in one line: a real editorial team with real client portfolios must turn one closed month of search data into a short list of pages worth human attention. This paper is Lane 2 of the internship program &#8212; <em>Refresh / Content Opportunity Scoring</em> &#8212; applied to that question.</p>
 
 <h2>2 &nbsp;Data</h2>
-<p>Economic facts, not click-level logs. The dataset is the <code>FlyRank/internship-warehouse</code> release on Hugging Face (public-but-gated, read token): per-page daily counts of impressions, clicks, position, active days, and content-release dates, partitioned by month. No client names, domains, URLs, or queries appear anywhere in this report; all identities are hashes.</p>
+<p>Economic facts, not click-level logs. The dataset is the <code>FlyRank/internship-warehouse</code> release on Hugging Face (public-but-gated, read token): the <code>fact_content_daily_performance</code> table, per-page daily counts of impressions, clicks, position, active days, and content-release dates, partitioned by month. No client names, domains, URLs, or queries appear anywhere in this report; all identities are hashes.</p>
 <ul>
 <li><strong>Decision window (features):</strong> March 2026 (facts taken from the closed <code>2026-03</code> partition).</li>
 <li><strong>Outcome window (label):</strong> April 2026, measured on the <em>next</em> partition.</li>
@@ -63,6 +63,8 @@
 <p>This slice prints to ~90 MB and runs end-to-end on a laptop in minutes, or in a free Colab over <code>hf://</code>.</p>
 
 <h2>3 &nbsp;Methodology</h2>
+<h3>Assumptions</h3>
+<p>Reader, here is what we take for granted before showing any result: position and CTR are monthly aggregates (a 31-day average hides an intra-month slide); monthly demand is a workable proxy for "visibility"; a page staying within 80% of its own March level counts as "stable." Each assumption is visible so a reader can disagree with it where the results stand on it.</p>
 <h3>Label definition</h3>
 <p><em>Declined next-month:</em> a page whose April impressions fell below 80% of its March impressions. This is a <strong>relative</strong> decline label &#8212; it asks "is this page under-performing its own recent baseline?," the question editors actually act on &#8212; which also makes it robust to month-to-month market shifts. April-only; no page contributes both to its decision window and its outcome window.</p>
 <h3>Features</h3>
@@ -79,19 +81,21 @@
 <h2>4 &nbsp;Results</h2>
 <p>On the same 13 held-out clients, all three approaches, and the base rate visible:</p>
 <table>
-<tr><th>Model (held-out test)</th><th>P@10</th><th>P@20</th><th>P@50</th><th>P@100</th><th>AUC</th></tr>
+<tr><th>Table 1. Model (held-out test)</th><th>P@10</th><th>P@20</th><th>P@50</th><th>P@100</th><th>AUC</th></tr>
 <tr><td>Chance (base rate)</td><td>0.43</td><td>0.43</td><td>0.43</td><td>0.43</td><td>0.50</td></tr>
 <tr><td>Rule baseline (w04 hand rule)</td><td>0.70</td><td>0.70</td><td>0.44</td><td>0.45</td><td>0.451</td></tr>
 <tr><td>Logistic regression</td><td>0.80</td><td>0.85</td><td>0.70</td><td>0.69</td><td>0.731</td></tr>
 <tr><td><strong>Random Forest</strong></td><td><strong>0.90</strong></td><td><strong>0.90</strong></td><td><strong>0.86</strong></td><td><strong>0.87</strong></td><td><strong>0.739</strong></td></tr>
 </table>
 <figure>
-<img src="img/results_precision_at_k.png" alt="Precision at K: rule baseline, logistic regression, and random forest on the same held-out clients, with the base rate as a dashed line.">
-<figcaption><span class="take"><strong>Takeaway:</strong> at the review budgets an editor actually has, the forest's early rows are correct 9 out of 10 times &#8212; the rule baseline collapses to near-chance once you pass a handful of pages.</span></figcaption>
+<img src="img/results_precision_at_k.png" alt="Figure 1. Precision at K for the rule baseline, logistic regression, and random forest on the same held-out clients, with the base rate as a dashed line.">
+<figcaption>Figure 1 &mdash; Ranking quality on the same 13 held-out clients (seed-42 grouped split).
+<span class="take"><strong>Takeaway:</strong> at the review budgets an editor actually has, the forest's early rows are correct 9 out of 10 times &#8212; the rule baseline collapses to near-chance once you pass a handful of pages.</span></figcaption>
 </figure>
 <figure>
-<img src="img/w07_heldout_pk.png" alt="Held-out precision at K for the deployed random forest at ten review budgets.">
-<figcaption><span class="take"><strong>Takeaway:</strong> the shipped forest marks ~86&ndash;90% of the pages it ranks first, across every budget from a 10-page scan to a 500-page pass.</span></figcaption>
+<img src="img/w07_heldout_pk.png" alt="Figure 2. Held-out precision at K for the deployed random forest at six review budgets from K=10 to K=500, with the base rate as a dashed line.">
+<figcaption>Figure 2 &mdash; The shipped forest's held-out precision from a 10-page scan to a 500-page pass.
+<span class="take"><strong>Takeaway:</strong> precision holds at ~86&ndash;90% of the pages it ranks first, across every budget an editor realistically uses.</span></figcaption>
 </figure>
 <p>Why does the model win? The strongest permutation-importance driver is <strong>last-7-day momentum</strong> (the share of a page's monthly impressions that arrived in its final week) &#8212; a page whose traffic is already decelerating is the one most likely to end the next month down, and that signal is invisible to a raw "biggest faller" rule. The full pipeline, seeds, and receipts live in the notebooks under <code>work/notebooks/</code>.</p>
 
@@ -102,13 +106,15 @@
 <li><strong>High batched magnitude, fine relative behavior.</strong> Scores are not calibrated probabilities; we rank within a fixed April-labeled slice and never reuse the queue after the next month closes.</li>
 <li><strong>Survivor pool.</strong> Invisible pages (impressions &lt; 100) were out of scope by design &mdash; the playbook reviews pages that are <em>already being seen</em> but not earning it.</li>
 <li><strong>One month, one market.</strong> 43 clients and a single client-holdout are modest; GroupKFold stability checks help, but a cross-market replication is the honest next step.</li>
+<li><strong>Future work.</strong> Two things would harden this: a cross-month/cross-market replication, and a treated-vs-control refresh experiment &mdash; the only design that could measure the recovery half this playbook supports but is careful not to claim.</li>
 </ul>
 
 <h2>6 &nbsp;Ranked recommendations &mdash; the action playbook</h2>
 <p>The queue is the product. Every row of the pool was scored and bucketed into four actions; flags become human-readable reason codes; no row is ever acted on without a person.</p>
 <figure>
-<img src="img/w07_action_mix.png" alt="Share of pool assigned to each action: investigate first, watch and prepare, monitor, no action.">
-<figcaption><span class="take"><strong>Takeaway:</strong> a good playbook is intentionally small &mdash; 1% of pages go to the editor's first pass, the rest are handled by brightness of monitoring.</span></figcaption>
+<img src="img/w07_action_mix.png" alt="Figure 3. Share of pool assigned to each action: investigate first, watch and prepare, monitor, no action.">
+<figcaption>Figure 3 &mdash; The four actions and their share of the pool (decision-support).
+<span class="take"><strong>Takeaway:</strong> a good playbook is intentionally small &mdash; 1% of pages go to the editor's first pass, the rest are handled by brightness of monitoring.</span></figcaption>
 </figure>
 <table>
 <tr><th>Action</th><th>Share of pool</th><th>What the editor does</th></tr>
